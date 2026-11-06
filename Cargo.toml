@@ -1,0 +1,33 @@
+[package]
+name = "homing-cli"
+version = "0.1.0-dev"
+description = "Host tool for creating, signing and verifying homing app packages"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/trevortomlin/homing-cli"
+authors = ["Trevor Tomlin and homing contributors"]
+readme = "README.md"
+homepage = "https://github.com/trevortomlin/homing-cli"
+keywords = ["ota", "flutter", "embedded", "signing", "cli"]
+categories = ["command-line-utilities", "embedded", "development-tools"]
+
+[[bin]]
+name = "homing"
+path = "src/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+homing-format = { git = "https://github.com/trevortomlin/homing-format", rev = "d37400bf27396f93f996e02aa9721230d20c46f0" }
+semver = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+[dev-dependencies]
+assert_cmd = "2"
+tempfile = "3"
