@@ -294,10 +294,9 @@ fn verify(
     let f = fs::File::open(file).with_context(|| format!("cannot open {}", file.display()))?;
     let res = homing_format::verify(
         f,
-        VerifyOptions {
-            trust: &trust,
-            device: device.as_ref(),
-            floor,
+        match &device {
+            Some(d) => VerifyOptions::new(&trust).device(d).floor(floor),
+            None => VerifyOptions::new(&trust).floor(floor),
         },
     );
     match res {

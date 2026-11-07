@@ -116,31 +116,26 @@ impl Project {
 
     /// Build the manifest (without `files`) for an engine hash.
     pub fn manifest(&self, engine_hash: String) -> Result<Manifest> {
-        Ok(Manifest {
-            schema: 1,
-            id: self.app.id.clone(),
-            name: self.app.name.clone(),
-            version: self.app.version.clone(),
-            version_code: self.version_code()?,
-            min_version_code: self.app.min_version_code,
-            build_mode: self.app.build_mode,
-            runtime: Runtime {
-                embedder: self.runtime.embedder,
-                args: self.runtime.args.clone(),
-                env: self.runtime.env.clone(),
-            },
-            compat: Compat {
-                engine_hash,
-                arch: self.compat.arch,
-                machines: self.compat.machines.clone(),
-                graphics: self.compat.graphics.clone(),
-                base_image_min: self.compat.base_image_min.clone(),
-            },
-            health: self.health.unwrap_or_default(),
-            permissions: self.app.permissions.clone(),
-            files: vec![],
-            created: None,
-        })
+        let mut compat = Compat::new(engine_hash, self.compat.arch);
+        compat.machines = self.compat.machines.clone();
+        compat.graphics = self.compat.graphics.clone();
+        compat.base_image_min = self.compat.base_image_min.clone();
+        let mut runtime = Runtime::new(self.runtime.embedder);
+        runtime.args = self.runtime.args.clone();
+        runtime.env = self.runtime.env.clone();
+        let mut m = Manifest::new(
+            self.app.id.clone(),
+            self.app.name.clone(),
+            self.app.version.clone(),
+            self.version_code()?,
+            compat,
+        );
+        m.min_version_code = self.app.min_version_code;
+        m.build_mode = self.app.build_mode;
+        m.runtime = runtime;
+        m.health = self.health.unwrap_or_default();
+        m.permissions = self.app.permissions.clone();
+        Ok(m)
     }
 }
 
