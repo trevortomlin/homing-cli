@@ -201,7 +201,7 @@ fn load_for_edit(
             );
         }
     }
-    Ok(Index::parse(&doc).with_context(|| format!("invalid {}", path.display()))?)
+    Index::parse(&doc).with_context(|| format!("invalid {}", path.display()))
 }
 
 fn add(
