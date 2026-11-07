@@ -453,3 +453,36 @@ fn index_add_rejects_untrusted_packages_with_keys() {
     assert!(String::from_utf8(out).unwrap().contains("E_KEY_UNKNOWN"));
     assert!(!dir.join("index.json").exists());
 }
+
+#[test]
+fn name_and_version_default_from_pubspec() {
+    let d = tempfile::tempdir().unwrap();
+    let dir = d.path();
+    setup(dir);
+    let toml_path = dir.join("app/homing.toml");
+    let t = fs::read_to_string(&toml_path)
+        .unwrap()
+        .replace("name = \"Hello\"\n", "")
+        .replace("version = \"1.2.3\"\n", "");
+    fs::write(&toml_path, t).unwrap();
+
+    // Without pubspec.yaml: a configuration error that says what to do.
+    homing(dir)
+        .args(["pack", "-C", "app", "--engine-json", "engine.json"])
+        .args(["--key", "keys/release.key"])
+        .assert()
+        .code(1)
+        .stderr(predicates::str::contains("pubspec.yaml"));
+
+    fs::write(
+        dir.join("app/pubspec.yaml"),
+        "name: hello_app\ndescription: test\nversion: 2.1.0+7 # build 7\n\nenvironment:\n  sdk: ^3.8.0\n",
+    )
+    .unwrap();
+    pack(dir, "p.homing");
+    let out = stdout(homing(dir).args(["inspect", "p.homing", "--json"]), 0);
+    let m: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(m["name"], "hello_app");
+    assert_eq!(m["version"], "2.1.0+7");
+    assert_eq!(m["version_code"], 20100);
+}

@@ -28,8 +28,10 @@ pub struct Project {
 #[serde(deny_unknown_fields)]
 pub struct App {
     pub id: String,
-    pub name: String,
-    pub version: String,
+    /// Default: `name` from pubspec.yaml.
+    pub name: Option<String>,
+    /// Default: `version` from pubspec.yaml.
+    pub version: Option<String>,
     /// Default: derived from `version` as major*10000 + minor*100 + patch.
     pub version_code: Option<u64>,
     #[serde(default)]
@@ -95,19 +97,57 @@ impl Default for Paths {
 }
 
 impl Project {
+    /// Load `homing.toml` from `dir`. A missing `app.name` or `app.version` is taken from the
+    /// Flutter app's `pubspec.yaml` in the same directory.
     pub fn load(dir: &Path) -> Result<Self> {
         let p = dir.join(FILE);
         let text =
             std::fs::read_to_string(&p).with_context(|| format!("cannot read {}", p.display()))?;
-        toml::from_str(&text).with_context(|| format!("invalid {}", p.display()))
+        let mut proj: Project =
+            toml::from_str(&text).with_context(|| format!("invalid {}", p.display()))?;
+        if proj.app.name.is_none() || proj.app.version.is_none() {
+            let pubspec = dir.join("pubspec.yaml");
+            let text = match std::fs::read_to_string(&pubspec) {
+                Ok(t) => t,
+                // Nothing to fall back to: a configuration error, not an I/O failure.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => bail!(
+                    "app.name or app.version is not set in {FILE}, and there is no {}",
+                    pubspec.display()
+                ),
+                Err(e) => {
+                    return Err(e).with_context(|| format!("cannot read {}", pubspec.display()));
+                }
+            };
+            for (field, value) in [
+                ("name", &mut proj.app.name),
+                ("version", &mut proj.app.version),
+            ] {
+                if value.is_none() {
+                    *value = Some(pubspec_field(&text, field).with_context(|| {
+                        format!("set app.{field} in {FILE} or `{field}:` in pubspec.yaml")
+                    })?);
+                }
+            }
+        }
+        Ok(proj)
+    }
+
+    /// Display name (resolved by [`Project::load`]).
+    pub fn name(&self) -> &str {
+        self.app.name.as_deref().unwrap_or_default()
+    }
+
+    /// Version (resolved by [`Project::load`]).
+    pub fn version(&self) -> &str {
+        self.app.version.as_deref().unwrap_or_default()
     }
 
     pub fn version_code(&self) -> Result<u64> {
         if let Some(vc) = self.app.version_code {
             return Ok(vc);
         }
-        let v = semver::Version::parse(&self.app.version)
-            .with_context(|| format!("app.version {:?} is not semver", self.app.version))?;
+        let v = semver::Version::parse(self.version())
+            .with_context(|| format!("app.version {:?} is not semver", self.version()))?;
         if v.minor > 99 || v.patch > 99 {
             bail!("cannot derive version_code from {v} (minor/patch > 99); set app.version_code");
         }
@@ -125,8 +165,8 @@ impl Project {
         runtime.env = self.runtime.env.clone();
         let mut m = Manifest::new(
             self.app.id.clone(),
-            self.app.name.clone(),
-            self.app.version.clone(),
+            self.name(),
+            self.version(),
             self.version_code()?,
             compat,
         );
@@ -139,11 +179,26 @@ impl Project {
     }
 }
 
+/// A top-level scalar from pubspec.yaml (`key: value`, optionally quoted, with an optional
+/// trailing comment). pubspec.yaml is simple enough that a full YAML parser is not needed.
+fn pubspec_field(text: &str, key: &str) -> Option<String> {
+    text.lines().find_map(|line| {
+        let rest = line.strip_prefix(key)?.strip_prefix(':')?;
+        let value = rest.split(" #").next().unwrap_or_default().trim();
+        let value = value
+            .strip_prefix('"')
+            .and_then(|v| v.strip_suffix('"'))
+            .or_else(|| value.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')))
+            .unwrap_or(value);
+        (!value.is_empty()).then(|| value.to_owned())
+    })
+}
+
 pub const TEMPLATE: &str = r#"# homing project file. See https://github.com/trevortomlin/homing-cli
 [app]
 id = "com.example.myapp"
-name = "My App"
-version = "1.0.0"
+name = "My App"             # default: name from pubspec.yaml
+version = "1.0.0"           # default: version from pubspec.yaml
 # version_code = 10000      # default: major*10000 + minor*100 + patch
 # min_version_code = 0      # raises the device anti-rollback floor once committed
 # build_mode = "release"    # release | profile | debug (debug: dev-mode devices only)
@@ -169,3 +224,26 @@ trial_s = 60
 bundle = "build/linux-embedded/bundle"   # contains flutter_assets/ and lib/libapp.so
 config = "homing/config"
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::pubspec_field;
+
+    #[test]
+    fn reads_pubspec_fields() {
+        let text = "# comment\nname: hello_app\ndescription: x\nversion: 1.2.3+45 # build\n\nenvironment:\n  sdk: ^3.8.0\n";
+        assert_eq!(pubspec_field(text, "name").as_deref(), Some("hello_app"));
+        assert_eq!(pubspec_field(text, "version").as_deref(), Some("1.2.3+45"));
+        assert_eq!(pubspec_field(text, "sdk"), None, "only top-level keys");
+        assert_eq!(
+            pubspec_field("version: \"2.0.0\"\n", "version").as_deref(),
+            Some("2.0.0")
+        );
+        assert_eq!(
+            pubspec_field("version: '2.0.1'\n", "version").as_deref(),
+            Some("2.0.1")
+        );
+        assert_eq!(pubspec_field("version:\n", "version"), None);
+        assert_eq!(pubspec_field("versions: 1.0.0\n", "version"), None);
+    }
+}
