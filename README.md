@@ -62,6 +62,10 @@ homing-agent).
 | `homing pack [-C DIR] [-o FILE] [--engine-json FILE] [--key FILE] [--no-compress]` | Collect the payload, write and sign the manifest, and archive it (zstd by default). |
 | `homing verify <file> --keys DIR [--dev] [--engine-json FILE] [--floor N] [--json]` | Full verification: signature, manifest, hashes and, with `--engine-json`, device compatibility. Prints `PASS` or the error code. |
 | `homing inspect <file> [--json]` | Print the manifest without checking trust. |
+| `homing index add <index.json> <pkg>... [--url-prefix P] [--keys DIR] [--key FILE]` | Add packages to a signed update index (created if missing) and re-sign it. |
+| `homing index remove <index.json> <id> <version_code> [--key FILE]` | Remove an app version and re-sign. |
+| `homing index verify <index.json> --keys DIR [--engine-json FILE --app ID --installed N]` | Verify the index signature and optionally show which build a device would install. |
+| `homing index show <index.json> [--json]` | List the index contents without checking the signature. |
 
 Run `homing <command> --help` for details.
 
@@ -70,7 +74,7 @@ Run `homing <command> --help` for details.
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Usage or configuration error |
+| 1 | Usage or configuration error (bad arguments, missing key, invalid `homing.toml`) |
 | 2 | Verification failed. The error code (`E_SIG`, `E_HASH`, `E_ENGINE`, `E_ROLLBACK`, ...) goes to stdout, or into the JSON with `--json`. |
 | 3 | I/O error |
 
@@ -138,6 +142,37 @@ package. The engine commit in `engine.json` must match the one the app was compi
 (`bin/internal/engine.version` in the Flutter SDK). Otherwise the package is rejected with
 `E_ENGINE`.
 
+## Publishing updates over HTTP
+
+Devices running homing-agent can poll an HTTP(S) server for updates. The server needs only static
+files: a signed `index.json`, its signature `index.json.sig`, and the packages.
+
+```console
+$ homing index add site/index.json site/packages/*.homing --url-prefix packages/ \
+      --keys trust --key keys/release.key
+added com.example.myapp 1.0.0 (version_code 10000) for aarch64 5a2a6a42
+site/index.json: 1 app versions, signed by d772bf35f0726cb8
+
+$ homing index verify site/index.json --keys trust --engine-json engine.json --app com.example.myapp
+PASS 1 app versions, signed by d772bf35f0726cb8
+update: 1.0.0 (version_code 10000) from packages/com.example.myapp-1.0.0-aarch64-5a2a6a42.homing
+```
+
+Then upload `site/` to any web server. Notes:
+
+- Each package becomes a build of its app version. Add packages for several engines,
+  architectures or machines, and every device picks the newest build that fits it. Adding a
+  package for a configuration that is already listed replaces that build.
+- `--keys` fully verifies each package before it is listed (recommended).
+- Package URLs are relative to the index, or absolute with `--url-prefix https://cdn.example.com/`.
+- Plain `http://` is fine: devices check the index signature and every package signature, so
+  TLS is not needed for integrity.
+- Before changing an existing index, `homing` checks that it still verifies against the signing
+  key (or a key in `--keys`). It refuses to re-sign an index that was modified by someone else
+  unless you pass `--force`.
+- `generated` is set from `SOURCE_DATE_EPOCH` if present, otherwise the current time. It is
+  informational only.
+
 ## Signing in CI
 
 Never commit secret keys. In CI, pass the key's base64 seed (the second field of the `.key`
@@ -156,7 +191,8 @@ HOMING_SIGNING_KEY="$SIGNING_SEED" homing pack --engine-json engine.json
 
 - [x] `init`, `keygen`, `pack`, `verify`, `inspect`
 - [ ] Prebuilt release binaries (Linux x86_64/aarch64, macOS)
-- [ ] `sign`, `bundle` (multi-app `.homingb`), `index add` (signed update index), `usb-stage`, `report`, `push`
+- [x] `index add`, `index remove`, `index verify`, `index show` (signed update index for HTTP)
+- [ ] `sign`, `bundle` (multi-app `.homingb`), `usb-stage`, `report`, `push`
 - [ ] `build`: wrap the Flutter AOT build for the target, then pack
 
 ## Minimum supported Rust version

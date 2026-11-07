@@ -1,5 +1,6 @@
 //! `homing`: host tool for homing app packages.
 
+mod index;
 mod project;
 
 use std::fs;
@@ -81,6 +82,11 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// Create, update, verify and show signed update indexes for HTTP sources.
+    Index {
+        #[command(subcommand)]
+        cmd: index::IndexCmd,
+    },
     /// Print a package's manifest without trust checks.
     Inspect {
         /// Package file (.homing).
@@ -107,10 +113,7 @@ fn main() -> ExitCode {
         Ok(code) => code,
         Err(e) => {
             eprintln!("error: {e:#}");
-            match e.downcast_ref::<homing_format::Error>() {
-                Some(_) => ExitCode::from(EXIT_VERIFY),
-                None => ExitCode::from(EXIT_IO),
-            }
+            ExitCode::from(exit_code(&e))
         }
     }
 }
@@ -141,6 +144,7 @@ fn run(cmd: Cmd) -> Result<ExitCode> {
             json,
         } => verify(&file, &keys, dev, engine_json.as_deref(), floor, json),
         Cmd::Inspect { file, json } => inspect(&file, json),
+        Cmd::Index { cmd } => index::run(cmd),
     }
 }
 
@@ -183,6 +187,36 @@ fn keygen(name: &str, dev: bool, out_dir: &Path) -> Result<ExitCode> {
     );
     println!("key id:     {}", sk.key_id());
     Ok(ExitCode::SUCCESS)
+}
+
+/// Exit code for an error: 2 for verification failures (a homing error code other than
+/// `E_IO`), 3 for I/O errors, 1 for everything else (bad arguments or configuration).
+fn exit_code(e: &anyhow::Error) -> u8 {
+    for cause in e.chain() {
+        if let Some(fe) = cause.downcast_ref::<homing_format::Error>() {
+            return if fe.code() == homing_format::ErrorCode::Io {
+                EXIT_IO
+            } else {
+                EXIT_VERIFY
+            };
+        }
+        if cause.is::<std::io::Error>() {
+            return EXIT_IO;
+        }
+    }
+    EXIT_USAGE
+}
+
+/// `SOURCE_DATE_EPOCH` (reproducible builds), if set.
+fn source_date_epoch() -> Result<Option<u64>> {
+    match std::env::var("SOURCE_DATE_EPOCH") {
+        Ok(v) => Ok(Some(
+            v.trim()
+                .parse()
+                .context("SOURCE_DATE_EPOCH is not an integer")?,
+        )),
+        Err(_) => Ok(None),
+    }
 }
 
 fn load_key(key: Option<&Path>) -> Result<SecretKey> {
@@ -230,10 +264,7 @@ fn pack(
         eprintln!("note: no icudtl.dat in bundle; the device's engine copy will be used");
     }
 
-    let mtime = match std::env::var("SOURCE_DATE_EPOCH") {
-        Ok(v) => v.parse().context("SOURCE_DATE_EPOCH is not an integer")?,
-        Err(_) => 0,
-    };
+    let mtime = source_date_epoch()?.unwrap_or(0);
     let mut w = PackageWriter::new(mtime).compression(if no_compress { None } else { Some(12) });
     w.add_dir(&bundle, "bundle")?;
     let config = dir.join(&proj.paths.config);
