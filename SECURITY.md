@@ -23,5 +23,4 @@ PASS for a package that a device would reject, or the reverse. Format-level issu
 
 ## Supported versions
 
-homing-cli is pre-alpha and has not been audited. Until 1.0, only the latest commit on
-`main` (and later the latest release) receives fixes.
+homing-cli has not been audited. Until 1.0, only the latest release receives fixes.

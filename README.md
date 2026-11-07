@@ -16,17 +16,27 @@ The package format is implemented in
 
 homing is an independent project, not affiliated with Google or the Flutter project.
 
-> **Status: pre-alpha.** Commands and the package format may still change in incompatible ways.
+> **Status: early release (0.1).** Commands and the package format may still change in
+> incompatible ways in 0.x minor releases; see the [changelog](CHANGELOG.md). Not audited.
 
 ## Installation
 
-You need Rust 1.85 or newer. The tool is not on crates.io yet:
+**Prebuilt binaries** for Linux (x86_64, aarch64; static, any distribution) and macOS (arm64,
+x86_64) are attached to each [release](https://github.com/trevortomlin/homing-cli/releases):
 
 ```sh
-cargo install --locked --git https://github.com/trevortomlin/homing-cli
+v=0.1.0 target=x86_64-unknown-linux-musl   # or aarch64-unknown-linux-musl, aarch64-apple-darwin, x86_64-apple-darwin
+curl -fsSLO https://github.com/trevortomlin/homing-cli/releases/download/v$v/homing-$v-$target.tar.gz
+curl -fsSLO https://github.com/trevortomlin/homing-cli/releases/download/v$v/SHA256SUMS
+sha256sum --check --ignore-missing SHA256SUMS      # macOS: shasum -a 256 --check --ignore-missing
+tar -xzf homing-$v-$target.tar.gz && sudo install homing-$v-$target/homing /usr/local/bin/
 ```
 
-This installs the `homing` binary.
+**From source** (Rust 1.85 or newer; not on crates.io yet):
+
+```sh
+cargo install --locked --git https://github.com/trevortomlin/homing-cli --tag v0.1.0
+```
 
 ## Quick start
 
@@ -144,8 +154,9 @@ package. The engine commit in `engine.json` must match the one the app was compi
 
 ## Publishing updates over HTTP
 
-Devices running homing-agent can poll an HTTP(S) server for updates. The server needs only static
-files: a signed `index.json`, its signature `index.json.sig`, and the packages.
+An HTTP(S) update server needs only static files: a signed `index.json`, its signature
+`index.json.sig`, and the packages. Devices poll it with homing-agent's HTTP source (planned
+for homing-agent 0.1.0); `homing index verify` shows what a given device would install.
 
 ```console
 $ homing index add site/index.json site/packages/*.homing --url-prefix packages/ \
