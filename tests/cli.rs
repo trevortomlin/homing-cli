@@ -226,7 +226,15 @@ fn usage_and_missing_key_errors() {
         .code(1);
     // A key file that cannot be read: an I/O error.
     homing(d.path())
-        .args(["pack", "-C", "app", "--engine-json", "engine.json", "--key", "nope.key"])
+        .args([
+            "pack",
+            "-C",
+            "app",
+            "--engine-json",
+            "engine.json",
+            "--key",
+            "nope.key",
+        ])
         .assert()
         .code(3);
 }
@@ -265,7 +273,13 @@ fn index_add_verify_select_remove() {
 
     // Create the index with both versions, verifying the packages first.
     homing(dir)
-        .args(["index", "add", "site/index.json", "site/v1.homing", "site/v2.homing"])
+        .args([
+            "index",
+            "add",
+            "site/index.json",
+            "site/v1.homing",
+            "site/v2.homing",
+        ])
         .args(["--keys", "keys"])
         .args(key)
         .env("SOURCE_DATE_EPOCH", "1793966400")
@@ -281,8 +295,18 @@ fn index_add_verify_select_remove() {
     // Verify and select: a device on 1.2.3 gets 1.3.0.
     let out = stdout(
         homing(dir).args([
-            "index", "verify", "site/index.json", "--keys", "keys", "--engine-json",
-            "engine.json", "--app", "com.example.hello", "--installed", "10203", "--json",
+            "index",
+            "verify",
+            "site/index.json",
+            "--keys",
+            "keys",
+            "--engine-json",
+            "engine.json",
+            "--app",
+            "com.example.hello",
+            "--installed",
+            "10203",
+            "--json",
         ]),
         0,
     );
@@ -293,7 +317,14 @@ fn index_add_verify_select_remove() {
 
     // Re-adding the same package replaces its build instead of duplicating it.
     homing(dir)
-        .args(["index", "add", "site/index.json", "site/v2.homing", "--url-prefix", "pkgs/"])
+        .args([
+            "index",
+            "add",
+            "site/index.json",
+            "site/v2.homing",
+            "--url-prefix",
+            "pkgs/",
+        ])
         .args(key)
         .assert()
         .success();
@@ -304,16 +335,31 @@ fn index_add_verify_select_remove() {
 
     // Remove a version.
     homing(dir)
-        .args(["index", "remove", "site/index.json", "com.example.hello", "10300"])
+        .args([
+            "index",
+            "remove",
+            "site/index.json",
+            "com.example.hello",
+            "10300",
+        ])
         .args(key)
         .assert()
         .success();
     let out = stdout(homing(dir).args(["index", "show", "site/index.json"]), 0);
-    assert!(out.contains("com.example.hello 1.2.3 (version_code 10203)"), "{out}");
+    assert!(
+        out.contains("com.example.hello 1.2.3 (version_code 10203)"),
+        "{out}"
+    );
     assert!(!out.contains("10300"), "{out}");
     // Removing it again is a usage error.
     homing(dir)
-        .args(["index", "remove", "site/index.json", "com.example.hello", "10300"])
+        .args([
+            "index",
+            "remove",
+            "site/index.json",
+            "com.example.hello",
+            "10300",
+        ])
         .args(key)
         .assert()
         .code(1);
@@ -332,7 +378,11 @@ fn index_tampering_is_detected_and_never_re_signed() {
         .assert()
         .success();
     let doc = fs::read_to_string(dir.join("index.json")).unwrap();
-    fs::write(dir.join("index.json"), doc.replace("v1.homing", "evil.homing")).unwrap();
+    fs::write(
+        dir.join("index.json"),
+        doc.replace("v1.homing", "evil.homing"),
+    )
+    .unwrap();
 
     let out = stdout(
         homing(dir).args(["index", "verify", "index.json", "--keys", "keys"]),
@@ -363,7 +413,14 @@ fn index_tampering_is_detected_and_never_re_signed() {
         .assert()
         .success();
     homing(dir)
-        .args(["index", "add", "index.json", "v1.homing", "--key", "other/other.key"])
+        .args([
+            "index",
+            "add",
+            "index.json",
+            "v1.homing",
+            "--key",
+            "other/other.key",
+        ])
         .assert()
         .code(1);
     fs::remove_file(dir.join("index.json.sig")).unwrap();
