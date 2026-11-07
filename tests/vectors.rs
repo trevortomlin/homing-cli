@@ -7,8 +7,13 @@ use std::path::PathBuf;
 use assert_cmd::Command;
 use serde_json::Value;
 
-/// `test-vectors/` of the homing-format version this crate depends on.
+/// `test-vectors/` of the homing-format version this crate depends on: from
+/// `$HOMING_FORMAT_VECTORS` if set (e.g. when the test binary runs on a device without cargo),
+/// else located with `cargo metadata`.
 fn vectors_dir() -> PathBuf {
+    if let Some(dir) = std::env::var_os("HOMING_FORMAT_VECTORS") {
+        return PathBuf::from(dir);
+    }
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let out = std::process::Command::new(cargo)
         .args(["metadata", "--format-version", "1", "--locked"])
